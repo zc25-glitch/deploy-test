@@ -1,0 +1,34 @@
+id: api-to-bq-gcs-stg
+namespace: eq-proj
+
+variables:
+  year: "{{trigger.date | date('yyyy')}}"
+  month: "{{trigger.date | date('MM')}}"
+
+tasks:
+  - id: set_label
+    type: io.kestra.plugin.core.execution.Labels
+    labels:
+      period: "{{render(vars.year)}}-{{render(vars.month)}}"
+
+  - id: run_script
+    type: io.kestra.plugin.scripts.python.Commands
+    beforeCommands:
+      - uv venv --quiet
+      - . .venv/bin/activate --quiet
+      - uv pip install --quiet kestra "dlt[bigquery,duckdb,filesystem,gs]"
+      - uv pip install --quiet reverse-geocode google-cloud-bigquery-storage
+    taskRunner:
+      type: io.kestra.plugin.core.runner.Process
+    namespaceFiles:
+      enabled: true
+    env:
+      DESTINATION__FILESYSTEM__BUCKET_URL: "{{kv('DESTINATION__FILESYSTEM__BUCKET_URL')}}"
+    commands:
+      - python ingest_data.py {{render(vars.year)}} {{render(vars.month)}}
+
+triggers:
+  - id: trigger_run
+    type: io.kestra.plugin.core.trigger.Schedule
+    cron: 0 0 1 * *
+    disabled: false
